@@ -110,21 +110,3 @@ It motivates the creator 😄🔥
 
 
 ---
-
-### 🚀 Next Steps I Can Do for You (Optional)
-Would you like me to:
-
-A) Create **animated preview GIFs** of scoring?  
-B) Deploy the frontend on **Vercel**?  
-C) Deploy backend on **Render with HTTPS**?  
-D) Add **CI Auto Build badge**?  
-E) Add **Custom Logo** for “Resume Match Engine”?  
-
-Reply:
-> **A**, **A+B**, **ALL**, or pick any options 😎
-
----
-
-Ready when you are, Cloud Engineer Kabir! ☁🔥
-pip install -r requirements.txt
-uvicorn app.main:app --reload
