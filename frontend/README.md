@@ -83,24 +83,27 @@ Also detects:
 Gives candidates real, actionable improvements.
 
 📁Project Structure
+```text
 resume-saas/
- ┣ 🚀 backend/
- ┃ ┣ 📦 app/
- ┃ ┃ ┣ ⚙ main.py
- ┃ ┃ ┣ 🧠 parser.py
- ┃ ┃ ┣ 🧩 skills.py
- ┃ ┣ 📄 uploaded_resume.pdf
- ┃ ┣ 📜 requirements.txt
- ┃
- ┣ 🎨 frontend/
- ┃ ┣ 🧩 src/
- ┃ ┃ ┣ 💡 App.jsx
- ┃ ┃ ┣ ⚙ main.jsx
- ┃ ┣ 📦 package.json
- ┃ ┣ ⚙ vite.config.js
- ┃
- ┣ 📝 README.md
- ┣ 🔒 .gitignore
+├─ backend/
+│  ├─ app/
+│  │  ├─ main.py
+│  │  ├─ parser.py
+│  │  ├─ skills.py
+│  ├─ uploaded_resume.pdf
+│  ├─ requirements.txt
+│
+├─ frontend/
+│  ├─ src/
+│  │  ├─ App.jsx
+│  │  ├─ main.jsx
+│  ├─ package.json
+│  ├─ vite.config.js
+│
+├─ README.md
+├─ .gitignore
+```
+
 
 
 ✨ Roadmap
