@@ -18,6 +18,15 @@ export default function App() {
   const [extraSkills, setExtraSkills] = useState([]);
   const [role, setRole] = useState(null);
 
+  // NEW — store last payload for PDF
+  const [lastPayload, setLastPayload] = useState(null);
+
+  // NEW — AI rewrite states
+  const [improvedSummary, setImprovedSummary] = useState("");
+  const [skillsToAdd, setSkillsToAdd] = useState([]);
+  const [bulletSuggestions, setBulletSuggestions] = useState([]);
+  const [loadingRewrite, setLoadingRewrite] = useState(false);
+
   async function upload() {
     if (!file) return alert("Upload a resume first!");
 
@@ -60,6 +69,9 @@ export default function App() {
       skills: parsed.skills || [],
     };
 
+    // NEW — Save input for PDF report
+    setLastPayload(payload);
+
     try {
       const res = await fetch("http://127.0.0.1:8000/score", {
         method: "POST",
@@ -79,12 +91,83 @@ export default function App() {
         setMissingSkills(data.missing_skills || []);
         setExtraSkills(data.resume_extra_skills || []);
         setRole(data.role || null);
+
+        // reset previous AI suggestions when scoring new JD
+        setImprovedSummary("");
+        setSkillsToAdd([]);
+        setBulletSuggestions([]);
       }
     } catch (err) {
       console.error(err);
       alert("Error calculating score. Check backend console.");
     } finally {
       setLoadingScore(false);
+    }
+  }
+
+  // NEW — PDF Download function
+  async function downloadReport() {
+    if (!lastPayload) return alert("Calculate score first!");
+
+    try {
+      const res = await fetch("http://127.0.0.1:8000/score-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(lastPayload),
+      });
+
+      if (!res.ok) return alert("Failed to generate report.");
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "resume_match_report.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert("Error downloading report.");
+    }
+  }
+
+  // NEW — Call /rewrite to improve resume for this JD
+  async function improveResume() {
+    if (!parsed) return alert("Upload & parse a resume first!");
+    if (!jd.trim()) return alert("Paste a Job Description!");
+
+    setLoadingRewrite(true);
+
+    const payload = {
+      resume: parsed.full_text || parsed.snippet || "",
+      jd: jd,
+    };
+
+    try {
+      const res = await fetch("http://127.0.0.1:8000/rewrite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (data.error) {
+        console.error("Rewrite error:", data.error);
+        alert("AI rewrite failed: " + data.error);
+      } else {
+        // Backend returns improved_summary, skills_to_add, bullet_suggestions
+        setImprovedSummary(data.improved_summary || "");
+        setSkillsToAdd(data.skills_to_add || []);
+        setBulletSuggestions(data.bullet_suggestions || []);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error calling AI rewrite. Check backend.");
+    } finally {
+      setLoadingRewrite(false);
     }
   }
 
@@ -428,196 +511,382 @@ export default function App() {
 
           {/* Score display */}
           {hasScore && (
-            <div
-              style={{
-                marginTop: 22,
-                display: "grid",
-                gridTemplateColumns: "auto 1fr",
-                gap: 18,
-                alignItems: "center",
-              }}
-            >
-              {/* Neon score donut */}
-              <div style={scoreCircle}>
-                <div style={scoreInner}>
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>Match Score</div>
-                  <div
-                    style={{
-                      fontSize: 32,
-                      fontWeight: 800,
-                      marginTop: 4,
-                      color: "#00ffb3",
-                    }}
-                  >
-                    {finalScore.toFixed(2)}%
+            <>
+              <div
+                style={{
+                  marginTop: 22,
+                  display: "grid",
+                  gridTemplateColumns: "auto 1fr",
+                  gap: 18,
+                  alignItems: "center",
+                }}
+              >
+                {/* Neon score donut */}
+                <div style={scoreCircle}>
+                  <div style={scoreInner}>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>
+                      Match Score
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 32,
+                        fontWeight: 800,
+                        marginTop: 4,
+                        color: "#00ffb3",
+                      }}
+                    >
+                      {finalScore.toFixed(2)}%
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        marginTop: 4,
+                        opacity: 0.65,
+                        textAlign: "center",
+                      }}
+                    >
+                      {role || "Role detected from JD"}
+                    </div>
                   </div>
+                </div>
+
+                {/* Breakdown */}
+                <div>
+                  <div style={{ fontSize: 14, marginBottom: 10 }}>
+                    <span style={{ marginRight: 6 }}>🧠</span>
+                    <b>Score Breakdown</b>
+                  </div>
+
                   <div
                     style={{
-                      fontSize: 11,
-                      marginTop: 4,
-                      opacity: 0.65,
-                      textAlign: "center",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                      fontSize: 13,
                     }}
                   >
-                    {role || "Role detected from JD"}
+                    <div>
+                      <span style={{ opacity: 0.8 }}>Skill Match:</span>{" "}
+                      <b style={{ color: "#00ffb3" }}>
+                        {skillScore.toFixed(2)}%
+                      </b>{" "}
+                      <span style={{ opacity: 0.6 }}>(max 70%)</span>
+                    </div>
+                    <div>
+                      <span style={{ opacity: 0.8 }}>JD Similarity:</span>{" "}
+                      <b style={{ color: "#4cc9f0" }}>
+                        {jdScore.toFixed(2)}%
+                      </b>{" "}
+                      <span style={{ opacity: 0.6 }}>(max 30%)</span>
+                    </div>
+                  </div>
+
+                  {/* Matched skills */}
+                  <div style={{ marginTop: 14 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        marginBottom: 4,
+                      }}
+                    >
+                      <span>✅</span>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>
+                        JD Skills you already have
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 6,
+                      }}
+                    >
+                      {matchedSkills.length ? (
+                        matchedSkills.map((s, i) => (
+                          <span
+                            key={i}
+                            style={pill("rgba(0,255,140,0.18)", "#a9ffdc")}
+                          >
+                            {s}
+                          </span>
+                        ))
+                      ) : (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          No explicit overlap detected from JD wording.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Missing skills */}
+                  <div style={{ marginTop: 12 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        marginBottom: 4,
+                      }}
+                    >
+                      <span>⚠️</span>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>
+                        Important skills missing for this JD
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 6,
+                      }}
+                    >
+                      {missingSkills.length ? (
+                        missingSkills.map((s, i) => (
+                          <span
+                            key={i}
+                            style={pill("rgba(244,63,94,0.22)", "#fecaca")}
+                          >
+                            {s}
+                          </span>
+                        ))
+                      ) : (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          Great! No strong missing skills detected from JD
+                          text.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Extra skills */}
+                  <div style={{ marginTop: 12 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        marginBottom: 4,
+                      }}
+                    >
+                      <span>💎</span>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>
+                        Bonus skills in your resume
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 6,
+                      }}
+                    >
+                      {extraSkills.length ? (
+                        extraSkills.map((s, i) => (
+                          <span
+                            key={i}
+                            style={pill(
+                              "rgba(129,140,248,0.25)",
+                              "#e0e7ff"
+                            )}
+                          >
+                            {s}
+                          </span>
+                        ))
+                      ) : (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          No extra skills beyond JD keywords detected.
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Breakdown */}
-              <div>
-                <div style={{ fontSize: 14, marginBottom: 10 }}>
-                  <span style={{ marginRight: 6 }}>🧠</span>
-                  <b>Score Breakdown</b>
-                </div>
+              {/* NEW — Download PDF button */}
+              <button
+                onClick={downloadReport}
+                style={{
+                  marginTop: 20,
+                  width: "100%",
+                  padding: "10px 16px",
+                  borderRadius: "999px",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  background: "linear-gradient(135deg,#6366f1,#22d3ee)",
+                  color: "#020617",
+                  boxShadow: "0 0 16px rgba(129,140,248,0.6)",
+                }}
+              >
+                📄 Download ATS PDF Report
+              </button>
 
+              {/* NEW — AI Resume Improvement section (below PDF button) */}
+              <div
+                style={{
+                  marginTop: 18,
+                  padding: "14px 14px 16px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(34,197,94,0.45)",
+                  background:
+                    "radial-gradient(circle at top, rgba(22,163,74,0.13), rgba(3,7,18,0.95))",
+                  boxShadow: "0 0 20px rgba(34,197,94,0.25)",
+                }}
+              >
                 <div
                   style={{
                     display: "flex",
-                    flexDirection: "column",
-                    gap: 6,
-                    fontSize: 13,
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 10,
                   }}
                 >
                   <div>
-                    <span style={{ opacity: 0.8 }}>Skill Match:</span>{" "}
-                    <b style={{ color: "#00ffb3" }}>
-                      {skillScore.toFixed(2)}%
-                    </b>{" "}
-                    <span style={{ opacity: 0.6 }}>(max 70%)</span>
+                    <div
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span>🎯</span>
+                      <span>AI Resume Improvement for this JD</span>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        opacity: 0.8,
+                        marginTop: 2,
+                      }}
+                    >
+                      Get a tailored summary, skills to add & bullet points
+                      based on this role.
+                    </div>
                   </div>
-                  <div>
-                    <span style={{ opacity: 0.8 }}>JD Similarity:</span>{" "}
-                    <b style={{ color: "#4cc9f0" }}>
-                      {jdScore.toFixed(2)}%
-                    </b>{" "}
-                    <span style={{ opacity: 0.6 }}>(max 30%)</span>
-                  </div>
+
+                  <button
+                    onClick={improveResume}
+                    disabled={loadingRewrite}
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: "999px",
+                      border: "none",
+                      cursor: loadingRewrite ? "wait" : "pointer",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      whiteSpace: "nowrap",
+                      background:
+                        "linear-gradient(135deg,#22c55e,#4ade80,#a3e635)",
+                      color: "#022c22",
+                      boxShadow: "0 0 14px rgba(34,197,94,0.6)",
+                    }}
+                  >
+                    {loadingRewrite
+                      ? "Optimizing..."
+                      : "Improve Resume for this JD"}
+                  </button>
                 </div>
 
-                {/* Matched skills */}
-                <div style={{ marginTop: 14 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      marginBottom: 4,
-                    }}
-                  >
-                    <span>✅</span>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>
-                      JD Skills you already have
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: 6,
-                    }}
-                  >
-                    {matchedSkills.length ? (
-                      matchedSkills.map((s, i) => (
-                        <span
-                          key={i}
-                          style={pill("rgba(0,255,140,0.18)", "#a9ffdc")}
+                {(improvedSummary ||
+                  skillsToAdd.length > 0 ||
+                  bulletSuggestions.length > 0) && (
+                  <div style={{ marginTop: 12 }}>
+                    {improvedSummary && (
+                      <div style={{ marginBottom: 10 }}>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            marginBottom: 4,
+                          }}
                         >
-                          {s}
-                        </span>
-                      ))
-                    ) : (
-                      <span style={{ fontSize: 12, opacity: 0.7 }}>
-                        No explicit overlap detected from JD wording.
-                      </span>
+                          📌 Improved Summary
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            lineHeight: 1.5,
+                            opacity: 0.95,
+                          }}
+                        >
+                          {improvedSummary}
+                        </div>
+                      </div>
                     )}
-                  </div>
-                </div>
 
-                {/* Missing skills */}
-                <div style={{ marginTop: 12 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      marginBottom: 4,
-                    }}
-                  >
-                    <span>⚠️</span>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>
-                      Important skills missing for this JD
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: 6,
-                    }}
-                  >
-                    {missingSkills.length ? (
-                      missingSkills.map((s, i) => (
-                        <span
-                          key={i}
-                          style={pill("rgba(244,63,94,0.22)", "#fecaca")}
+                    {skillsToAdd.length > 0 && (
+                      <div style={{ marginBottom: 10 }}>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            marginBottom: 4,
+                          }}
                         >
-                          {s}
-                        </span>
-                      ))
-                    ) : (
-                      <span style={{ fontSize: 12, opacity: 0.7 }}>
-                        Great! No strong missing skills detected from JD text.
-                      </span>
+                          ✨ Skills to Add
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 6,
+                          }}
+                        >
+                          {skillsToAdd.map((s, i) => (
+                            <span
+                              key={i}
+                              style={pill(
+                                "rgba(190,242,100,0.15)",
+                                "#ecfccb"
+                              )}
+                            >
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     )}
-                  </div>
-                </div>
 
-                {/* Extra skills */}
-                <div style={{ marginTop: 12 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      marginBottom: 4,
-                    }}
-                  >
-                    <span>💎</span>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>
-                      Bonus skills in your resume
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: 6,
-                    }}
-                  >
-                    {extraSkills.length ? (
-                      extraSkills.map((s, i) => (
-                        <span
-                          key={i}
-                          style={pill("rgba(129,140,248,0.25)", "#e0e7ff")}
+                    {bulletSuggestions.length > 0 && (
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            marginBottom: 4,
+                          }}
                         >
-                          {s}
-                        </span>
-                      ))
-                    ) : (
-                      <span style={{ fontSize: 12, opacity: 0.7 }}>
-                        No extra skills beyond JD keywords detected.
-                      </span>
+                          💡 Bullet Suggestions
+                        </div>
+                        <ul
+                          style={{
+                            fontSize: 12,
+                            paddingLeft: 18,
+                            margin: 0,
+                            opacity: 0.95,
+                          }}
+                        >
+                          {bulletSuggestions.map((b, i) => (
+                            <li key={i} style={{ marginBottom: 4 }}>
+                              {b}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
                   </div>
-                </div>
+                )}
               </div>
-            </div>
+            </>
           )}
         </section>
       </main>
     </div>
   );
 }
-
 
