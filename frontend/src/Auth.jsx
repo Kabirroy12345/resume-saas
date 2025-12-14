@@ -36,11 +36,17 @@ export default function AuthPage() {
     try {
       console.log("Full Login URL:", fullUrl); // DEBUG: Log to console
 
+      // Add 60s timeout for cold starts
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
       const response = await fetch(fullUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
 
       const data = await response.json();
 
@@ -60,7 +66,13 @@ export default function AuthPage() {
         window.location.href = '/';
       }, 1500);
     } catch (err) {
-      setError(`Network error. Ensure backend is reachable at ${API_BASE}`);
+      if (err.name === 'AbortError') {
+        setError("Request timed out (Server Sleeping). Please try again in 30s.");
+      } else {
+        // Use baseUrl instead of API_BASE if API_BASE is not defined
+        const urlToCheck = typeof baseUrl !== 'undefined' ? baseUrl : "backend";
+        setError(`Network error. Ensure backend is reachable at ${urlToCheck}`);
+      }
     } finally {
       setLoading(false);
     }
