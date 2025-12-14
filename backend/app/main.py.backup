@@ -1,0 +1,369 @@
+from fastapi import FastAPI, UploadFile, File, Body, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from datetime import timedelta
+import io
+import json
+import os
+from typing import Optional
+
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+
+from .parser import parse_resume
+from .skills import SKILLS
+from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
+from dotenv import load_dotenv
+
+# Import database and auth modules
+from .database import get_db, SessionLocal
+from .models import User, Analysis, Base
+from .auth import hash_password, verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from .database import engine
+
+# Try to import Groq (optional for AI features)
+try:
+    from groq import Groq
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+    client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+except ImportError:
+    client = None
+    print("⚠️ Groq not installed - AI features disabled")
+
+load_dotenv()
+
+# Create database tables
+Base.metadata.create_all(bind=engine)
+
+# Initialize app
+app = FastAPI(title="Resume SaaS Backend")
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Load embedding model
+model = SentenceTransformer("all-MiniLM-L6-v2")
+
+# Pydantic models for requests
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    username: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+# ==================== AUTH ENDPOINTS ====================
+
+@app.post("/auth/register", response_model=TokenResponse)
+async def register(request: RegisterRequest, db: Session = Depends(get_db)):
+    """Register a new user"""
+    # Check if user exists
+    existing_user = db.query(User).filter(User.email == request.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    existing_username = db.query(User).filter(User.username == request.username).first()
+    if existing_username:
+        raise HTTPException(status_code=400, detail="Username already taken")
+    
+    # Create new user
+    hashed_pw = hash_password(request.password)
+    new_user = User(
+        email=request.email,
+        username=request.username,
+        hashed_password=hashed_pw
+    )
+    
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    # Create access token
+    access_token = create_access_token(
+        data={"sub": request.email},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.post("/auth/login", response_model=TokenResponse)
+async def login(request: LoginRequest, db: Session = Depends(get_db)):
+    """Login user"""
+    user = db.query(User).filter(User.email == request.email).first()
+    
+    if not user or not verify_password(request.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password"
+        )
+    
+    # Create access token
+    access_token = create_access_token(
+        data={"sub": user.email},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+# ==================== RESUME ENDPOINTS ====================
+
+@app.get("/")
+def home():
+    return {"status": "Backend running", "message": "Resume SaaS API is live 🚀"}
+
+
+@app.post("/upload-resume")
+async def upload_resume(file: UploadFile = File(...)):
+    """Upload and parse resume"""
+    try:
+        content = await file.read()
+        parsed = parse_resume(content)
+        return {"filename": file.filename, "parsed": parsed}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse resume: {str(e)}")
+
+
+def extract_skills(text: str):
+    """Extract skills from text using skill dictionary"""
+    text_lower = text.lower()
+    found = set()
+    for skill in SKILLS:
+        if skill.lower() in text_lower:
+            found.add(skill)
+    return list(found)
+
+
+def compute_score(resume_text, jd_text):
+    """Compute match score between resume and job description"""
+    resume_skills = set(extract_skills(resume_text))
+    jd_skills = set(extract_skills(jd_text))
+    
+    if not jd_skills:
+        return {
+            "match_score": 0.0,
+            "skill_score": 0.0,
+            "semantic_score": 0.0,
+            "matched_jd_skills": [],
+            "missing_skills": [],
+            "resume_extra_skills": []
+        }
+    
+    # Skill matching (70% weight)
+    matched = resume_skills.intersection(jd_skills)
+    missing = jd_skills - resume_skills
+    extra = resume_skills - jd_skills
+    
+    skill_score = (len(matched) / len(jd_skills)) if jd_skills else 0.0
+    
+    # Semantic similarity (30% weight)
+    resume_emb = model.encode([resume_text])
+    jd_emb = model.encode([jd_text])
+    semantic_score = float(cosine_similarity(resume_emb, jd_emb)[0][0])
+    
+    # Final weighted score
+    match_score = (0.7 * skill_score) + (0.3 * semantic_score)
+    
+    return {
+        "match_score": round(match_score * 100, 1),
+        "skill_score": round(skill_score * 100, 1),
+        "semantic_score": round(semantic_score * 100, 1),
+        "matched_jd_skills": sorted(list(matched)),
+        "missing_skills": sorted(list(missing)),
+        "resume_extra_skills": sorted(list(extra))
+    }
+
+
+@app.post("/score")
+async def score_resume(data: dict = Body(...)):
+    """Calculate match score between resume and JD"""
+    try:
+        resume_text = data.get("resume", "")
+        jd_text = data.get("jd", "")
+        
+        if not resume_text or not jd_text:
+            raise HTTPException(status_code=400, detail="Resume and JD required")
+        
+        result = compute_score(resume_text, jd_text)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/score-report")
+async def score_report(data: dict = Body(...)):
+    """Generate PDF report of match score"""
+    try:
+        resume_text = data.get("resume", "")
+        jd_text = data.get("jd", "")
+        
+        if not resume_text or not jd_text:
+            raise HTTPException(status_code=400, detail="Resume and JD required")
+        
+        result = compute_score(resume_text, jd_text)
+        
+        # Create PDF
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+        
+        # Title
+        c.setFont("Helvetica-Bold", 20)
+        c.drawString(50, height - 50, "Resume ATS Match Report")
+        
+        # Match Score
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(50, height - 100, f"Overall Match Score: {result['match_score']}%")
+        
+        # Breakdown
+        c.setFont("Helvetica", 12)
+        c.drawString(50, height - 130, f"Skill Match: {result['skill_score']}%")
+        c.drawString(50, height - 150, f"Semantic Match: {result['semantic_score']}%")
+        
+        # Matched Skills
+        y = height - 180
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(50, y, "✅ Matched Skills:")
+        y -= 20
+        c.setFont("Helvetica", 10)
+        for skill in result['matched_jd_skills'][:15]:
+            c.drawString(70, y, f"• {skill}")
+            y -= 15
+            if y < 100:
+                break
+        
+        # Missing Skills
+        if result['missing_skills'] and y > 200:
+            y -= 20
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(50, y, "⚠️ Missing Skills:")
+            y -= 20
+            c.setFont("Helvetica", 10)
+            for skill in result['missing_skills'][:10]:
+                c.drawString(70, y, f"• {skill}")
+                y -= 15
+                if y < 100:
+                    break
+        
+        # Bonus Skills
+        if result['resume_extra_skills'] and y > 200:
+            y -= 20
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(50, y, "💎 Bonus Skills:")
+            y -= 20
+            c.setFont("Helvetica", 10)
+            for skill in result['resume_extra_skills'][:10]:
+                c.drawString(70, y, f"• {skill}")
+                y -= 15
+                if y < 100:
+                    break
+        
+        c.save()
+        buffer.seek(0)
+        
+        return StreamingResponse(
+            buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=ats_report.pdf"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/rewrite")
+async def rewrite_resume(data: dict = Body(...)):
+    """AI-powered resume rewrite suggestions using Groq"""
+    if not client:
+        return {
+            "improved_summary": "AI service not configured. Add GROQ_API_KEY to .env",
+            "skills_to_add": ["Docker", "Kubernetes", "CI/CD"],
+            "bullet_suggestions": [
+                "Led cross-functional team to deliver project 20% ahead of schedule",
+                "Optimized system performance resulting in 30% efficiency improvement"
+            ]
+        }
+    
+    resume_text = data.get("resume", "")
+    jd_text = data.get("jd", "")
+    
+    if not resume_text or not jd_text:
+        return {"error": "Resume or JD missing"}
+    
+    prompt = f"""You are a professional resume writer. Analyze this resume and job description, then provide suggestions.
+
+Resume:
+{resume_text[:1000]}
+
+Job Description:
+{jd_text[:1000]}
+
+Provide response in this EXACT JSON format (no other text):
+{{
+  "improved_summary": "A 2-3 sentence professional summary tailored to this role",
+  "skills_to_add": ["skill1", "skill2", "skill3"],
+  "bullet_suggestions": ["Achievement-oriented bullet point 1", "Achievement-oriented bullet point 2"]
+}}"""
+    
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=800,
+        )
+        reply = response.choices[0].message.content.strip()
+        
+        # Try to parse JSON
+        try:
+            return json.loads(reply)
+        except json.JSONDecodeError:
+            # Try to extract JSON from response
+            start = reply.find("{")
+            end = reply.rfind("}") + 1
+            if start != -1 and end > start:
+                try:
+                    json_str = reply[start:end]
+                    return json.loads(json_str)
+                except json.JSONDecodeError:
+                    pass
+            
+            # If all fails, return default response
+            return {
+                "improved_summary": "Professional with strong technical background seeking to advance career in this role",
+                "skills_to_add": ["cloud platforms", "containerization", "CI/CD pipelines"],
+                "bullet_suggestions": [
+                    "Developed scalable solutions improving system performance by 30%",
+                    "Led cross-functional teams to deliver critical projects on schedule"
+                ]
+            }
+    
+    except Exception as e:
+        return {
+            "improved_summary": "Experienced professional seeking opportunities to leverage technical expertise",
+            "skills_to_add": ["emerging technologies", "team leadership", "system design"],
+            "bullet_suggestions": [
+                "Successfully delivered high-impact projects",
+                "Collaborated with diverse teams on technical initiatives"
+            ]
+        }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

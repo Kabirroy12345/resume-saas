@@ -45,12 +45,30 @@ def extract_skills(text: str) -> list[str]:
     text_low = text.lower()
     found = set()
 
-    for skill in SKILLS:
-        if skill.lower() in text_low:
+    # Create a regex pattern for strict matching
+    # Sort skills by length (descending) so 'c++' matches before 'c'
+    all_skills = sorted(SKILLS, key=len, reverse=True)
+    
+    # Escape special regex chars in skills (like c++, c#, .net)
+    # \b matches word boundary. 
+    # For symbols like C++, \b might not work at the end if followed by space, so we use a more complex pattern or just simple whitespace boundaries
+    # A safe pattern for "C++" is (?<!\w)C\+\+(?!\w)
+    
+    # But for simplicity and performance with this list:
+    for skill in all_skills:
+        # Construct pattern: lookbehind/ahead for non-word char, OR start/end of string
+        # We handle the special cases where skill itself contains non-word chars (like c++, .net)
+        
+        s_esc = re.escape(skill.lower())
+        pattern = r'(?:^|[\s,.\/;:\(\)\[\]])' + s_esc + r'(?:$|[\s,.\/;:\(\)\[\]])'
+        
+        if re.search(pattern, text_low):
             found.add(skill)
 
     for syn, real in SYNONYMS.items():
-        if syn in text_low:
+        s_esc = re.escape(syn)
+        pattern = r'(?:^|[\s,.\/;:\(\)\[\]])' + s_esc + r'(?:$|[\s,.\/;:\(\)\[\]])'
+        if re.search(pattern, text_low):
             found.add(real)
 
     return sorted(found)
@@ -100,7 +118,21 @@ def parse_resume(content: bytes) -> dict:
     emails, phones = extract_contacts(text)
     skills = extract_skills(text)
 
-    snippet = text[:600].replace("\r", " ").strip()
+    skills = extract_skills(text)
+
+    # Improved Snippet Extraction
+    snippet = ""
+    # 1. Try to find "Summary" or "Profile" header
+    summary_match = re.search(r"(?i)(?:summary|profile|objective|about me)[\s:]+(.{50,500})", text, re.DOTALL)
+    if summary_match:
+        snippet = summary_match.group(1).strip().replace("\n", " ")[:600]
+    else:
+        # 2. Fallback: First paragraph that looks like specific content
+        lines = [l.strip() for l in text.split('\n') if len(l.strip()) > 40]
+        if lines:
+            snippet = " ".join(lines[:3])[:600]
+        else:
+            snippet = text[:600].replace("\r", " ").strip()
 
     return {
         "name": name,

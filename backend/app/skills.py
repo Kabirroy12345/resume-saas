@@ -18,37 +18,47 @@ SKILLS = [
     "mysql", "postgresql", "sqlite", "mongodb", "redis", "oracle",
     "sql server", "firebase",
 
-    # Cloud / DevOps
-    "aws", "azure", "gcp",
-    "docker", "kubernetes", "terraform", "ansible",
-    "jenkins", "github actions", "gitlab ci",
-    "ci/cd", "devops",
+    # Cloud / DevOps (Expanded)
+    "aws", "azure", "gcp", "google cloud", "amazon web services",
+    "docker", "kubernetes", "terraform", "ansible", "puppet", "chef",
+    "jenkins", "github actions", "gitlab ci", "circleci", "travis ci",
+    "prometheus", "grafana", "splunk", "elk stack", "datadog", "new relic",
+    "serverless", "lambda", "ec2", "s3", "fargate", "eks", "aks", "gke",
+
+    # Cybersecurity
+    "cybersecurity", "penetration testing", "network security", "information security",
+    "ethical hacking", "vulnerability assessment", "incident response",
+    "siem", "firewalls", "cryptography", "owasp", "burp suite", "metasploit",
+    "wireshark", "pci dss", "gdpr", "hipaa", "identity and access management", "iam",
+    "cissp", "ceh", "oscp",
+
+    # Blockchain / Web3
+    "blockchain", "solidity", "web3", "smart contracts", "ethereum", "bitcoin",
+    "hyperledger", "rust", "truffle", "hardhat", "ganache", "ipfs",
+    "defi", "nfts", "cryptography", "consensus algorithms",
 
     # OS / scripting
-    "linux", "bash", "powershell",
+    "linux", "bash", "powershell", "shell scripting", "unix",
 
     # Data / ML / AI
     "machine learning", "deep learning", "nlp", "computer vision",
     "data analysis", "pandas", "numpy", "scikit-learn",
-    "tensorflow", "pytorch",
+    "tensorflow", "pytorch", "keras", "opencv", "llm", "generative ai",
+    "hugging face", "transformers", "xgboost", "lightgbm",
+    "matplotlib", "seaborn", "plotly",
 
     # BI / analytics
-    "tableau", "power bi", "excel",
+    "tableau", "power bi", "excel", "looker", "qlik",
 
     # Messaging / streaming
-    "kafka", "rabbitmq",
+    "kafka", "rabbitmq", "sqs", "sns", "kinesis",
 
     # Mobile
-    "android", "ios", "flutter", "react native", "swiftui",
-
-    # Blockchain / Web3
-    "blockchain", "solidity", "hyperledger", "web3",
-
-    # Security
-    "cybersecurity", "penetration testing", "network security",
+    "android", "ios", "flutter", "react native", "swiftui", "kotlin", "swift", "dart",
 
     # Generic SWE / tools
-    "git", "github", "gitlab", "jira", "confluence",
+    "git", "github", "gitlab", "jira", "confluence", "agile", "scrum", "kanban",
+    "rest api", "graphql", "grpc", "microservices", "software architecture", "design patterns",
 ]
 
 # Synonyms / alternate spellings mapped to canonical skills above
