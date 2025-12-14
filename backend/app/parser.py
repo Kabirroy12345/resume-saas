@@ -5,8 +5,6 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from pdfminer.high_level import extract_text
-import spacy
-
 from .skills import SKILLS, SYNONYMS
 
 # Lazy load spaCy model to prevent blocking at startup
@@ -15,8 +13,10 @@ _nlp = None
 def get_nlp():
     global _nlp
     if _nlp is None:
+        import spacy
         print("Loading spaCy model...")
         _nlp = spacy.load("en_core_web_sm")
+        print("spaCy model loaded!")
         print("spaCy model loaded!")
     return _nlp
 

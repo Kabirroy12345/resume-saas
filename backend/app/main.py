@@ -21,9 +21,6 @@ from .auth import (
     get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES
 )
 
-from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer
-
 from dotenv import load_dotenv
 import os
 from groq import Groq
@@ -54,6 +51,8 @@ def get_model():
     global _model
     if _model is None:
         print("Loading SentenceTransformer model...")
+        # Lazy import heavy libraries
+        from sentence_transformers import SentenceTransformer
         _model = SentenceTransformer("all-MiniLM-L6-v2")
         print("Model loaded!")
     return _model
@@ -317,7 +316,9 @@ def compute_score(resume_text: str, jd_text: str, resume_skills_input: list[str]
     skill_score = coverage * 75.0  # Max 75 points from skills
 
     # 2. Semantic Similarity (Secondary Factor)
+    # 2. Semantic Similarity (Secondary Factor)
     try:
+        from sklearn.metrics.pairwise import cosine_similarity
         embed_model = get_model()
         emb_resume = embed_model.encode([resume_text])
         emb_jd = embed_model.encode([jd_text])
