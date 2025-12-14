@@ -11,5 +11,6 @@ passlib==1.7.4
 pydantic>=2.0
 pdfminer.six>=20221105
 spacy>=3.0
-argon2-cffi
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz
+argon2-cffi
+scikit-learn
