@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 
-const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 async function apiFetch(path, opts = {}, token) {
   const headers = opts.headers ? { ...opts.headers } : {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const cfg = { ...opts, headers };
-  const res = await fetch(`${API_BASE}${path}`, cfg);
+  // FOOLPROOF FIX: Use URL constructor
+  const fullUrl = new URL(path, API_BASE).href;
+  const res = await fetch(fullUrl, cfg);
   return res;
 }
 

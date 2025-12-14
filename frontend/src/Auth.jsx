@@ -27,11 +27,11 @@ export default function AuthPage() {
       ? { email: formData.email, password: formData.password }
       : formData;
 
-    // ROBUST FIX: Ensure exactly one slash between API_BASE and endpoint
-    const cleanBase = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
-    const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+    // FOOLPROOF FIX: Use URL constructor to handle all slash cases
+    const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    const fullUrl = new URL(endpoint, baseUrl).href;
 
-    const fullUrl = `${cleanBase}${cleanEndpoint}`;
+    console.log("v1.5 Auth Request:", fullUrl); // Version tagged log
 
     try {
       console.log("Full Login URL:", fullUrl); // DEBUG: Log to console
