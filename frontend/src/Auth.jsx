@@ -30,6 +30,8 @@ export default function AuthPage() {
     const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
 
     try {
+      console.log("Full Login URL:", `${API_BASE}${endpoint}`); // DEBUG: Log to console
+
       const response = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -39,7 +41,11 @@ export default function AuthPage() {
       const data = await response.json();
 
       if (!response.ok) {
+        // DEBUG: Alert the user to the exact error URL if it fails
+        // This helps verify if the double slash fix is actually applied on Vercel
+        console.error("Login failed:", data);
         setError(data.detail || 'Something went wrong');
+        // alert(`Debug Error: Failed to reach ${API_BASE}${endpoint}\nDetails: ${data.detail}`); 
         return;
       }
 
