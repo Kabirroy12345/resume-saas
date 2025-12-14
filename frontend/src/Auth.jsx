@@ -27,12 +27,16 @@ export default function AuthPage() {
       ? { email: formData.email, password: formData.password }
       : formData;
 
-    const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
+    // ROBUST FIX: Ensure exactly one slash between API_BASE and endpoint
+    const cleanBase = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
+    const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+
+    const fullUrl = `${cleanBase}${cleanEndpoint}`;
 
     try {
-      console.log("Full Login URL:", `${API_BASE}${endpoint}`); // DEBUG: Log to console
+      console.log("Full Login URL:", fullUrl); // DEBUG: Log to console
 
-      const response = await fetch(`${API_BASE}${endpoint}`, {
+      const response = await fetch(fullUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -45,7 +49,7 @@ export default function AuthPage() {
         // This helps verify if the double slash fix is actually applied on Vercel
         console.error("Login failed:", data);
         setError(data.detail || 'Something went wrong');
-        // alert(`Debug Error: Failed to reach ${API_BASE}${endpoint}\nDetails: ${data.detail}`); 
+        // alert(`Debug Error: Failed to reach ${fullUrl}\nDetails: ${data.detail}`); 
         return;
       }
 
