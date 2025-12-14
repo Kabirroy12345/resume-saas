@@ -23,12 +23,14 @@ export default function AuthPage() {
     setSuccess('');
 
     const endpoint = isLogin ? '/auth/login' : '/auth/register';
-    const payload = isLogin 
+    const payload = isLogin
       ? { email: formData.email, password: formData.password }
       : formData;
 
+    const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
     try {
-      const response = await fetch(`http://localhost:8000${endpoint}`, {
+      const response = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -43,12 +45,12 @@ export default function AuthPage() {
 
       setSuccess(isLogin ? 'Login successful! 🎉' : 'Account created! Welcome! 🚀');
       localStorage.setItem('token', data.access_token);
-      
+
       setTimeout(() => {
         window.location.href = '/';
       }, 1500);
     } catch (err) {
-      setError('Network error. Make sure backend is running on http://localhost:8000');
+      setError(`Network error. Ensure backend is reachable at ${API_BASE}`);
     } finally {
       setLoading(false);
     }
@@ -131,7 +133,7 @@ export default function AuthPage() {
             </div>
           </div>
 
-          <button 
+          <button
             onClick={handleSubmit}
             disabled={loading}
             className="submit-btn"
@@ -145,7 +147,7 @@ export default function AuthPage() {
         <div className="toggle-section">
           <p>
             {isLogin ? "Don't have an account? " : 'Already have an account? '}
-            <button 
+            <button
               onClick={toggleMode}
               className="toggle-btn"
             >

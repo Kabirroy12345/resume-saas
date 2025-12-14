@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 async function apiFetch(path, opts = {}, token) {
   const headers = opts.headers ? { ...opts.headers } : {};
