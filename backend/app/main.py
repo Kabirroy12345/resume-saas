@@ -31,7 +31,21 @@ from groq import Groq
 # Load environment variables
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+
+# Lazy load Groq client to prevent startup errors
+_groq_client = None
+
+def get_groq_client():
+    global _groq_client
+    if _groq_client is None and GROQ_API_KEY:
+        try:
+            print("Initializing Groq client...")
+            _groq_client = Groq(api_key=GROQ_API_KEY)
+            print("Groq client initialized!")
+        except Exception as e:
+            print(f"Failed to initialize Groq client: {e}")
+            return None
+    return _groq_client
 
 # Small, fast embedding model - loaded lazily to prevent startup delay
 _model = None
@@ -48,7 +62,12 @@ app = FastAPI(title="Resume SaaS Backend")
 os.makedirs("avatars", exist_ok=True)
 app.mount("/avatars", StaticFiles(directory="avatars"), name="avatars")
 
-init_db()
+# Initialize database on startup (not at import time)
+@app.on_event("startup")
+async def startup_event():
+    print("🔧 Initializing database...")
+    init_db()
+    print("✅ Database initialized!")
 
 app.add_middleware(
     CORSMiddleware,
@@ -507,8 +526,9 @@ async def download_report_endpoint(report_id: str, filename: str):
 @app.post("/rewrite")
 async def rewrite_resume(data: dict = Body(...)):
     """AI-powered resume rewrite suggestions using Groq"""
+    client = get_groq_client()
     if not client:
-        return {"error": "Groq API key missing (.env not configured)"}
+        return {"error": "Groq API key missing or client failed to initialize"}
 
     resume_text = data.get("resume") or ""
     jd_text = data.get("jd") or ""
