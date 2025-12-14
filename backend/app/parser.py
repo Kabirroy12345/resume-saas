@@ -9,8 +9,16 @@ import spacy
 
 from .skills import SKILLS, SYNONYMS
 
-# Load spaCy model once
-nlp = spacy.load("en_core_web_sm")
+# Lazy load spaCy model to prevent blocking at startup
+_nlp = None
+
+def get_nlp():
+    global _nlp
+    if _nlp is None:
+        print("Loading spaCy model...")
+        _nlp = spacy.load("en_core_web_sm")
+        print("spaCy model loaded!")
+    return _nlp
 
 
 def _pdf_bytes_to_text(content: bytes) -> str:
@@ -33,6 +41,7 @@ def extract_name(text: str) -> str | None:
     """Use spaCy NER to extract candidate person name from top of resume."""
     if not text:
         return None
+    nlp = get_nlp()
     doc = nlp(text[:1000])
     for ent in doc.ents:
         if ent.label_ == "PERSON":
