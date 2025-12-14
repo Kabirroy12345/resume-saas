@@ -37,8 +37,8 @@ client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
 app = FastAPI(title="Resume SaaS Backend")
+os.makedirs("avatars", exist_ok=True)
 app.mount("/avatars", StaticFiles(directory="avatars"), name="avatars")
-
 
 init_db()
 
