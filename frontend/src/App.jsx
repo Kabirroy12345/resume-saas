@@ -346,7 +346,11 @@ export default function App({ token: initialToken = null, onLogout }) {
       setMessage({ type: "success", text: "Scored successfully" });
     } catch (err) {
       console.error(err);
-      setMessage({ type: "error", text: err.message || "Scoring failed" });
+      const isTimeout = err.message && (err.message.includes("Failed to fetch") || err.name === "TypeError");
+      const msg = isTimeout
+        ? "Request timed out. The AI model is still booting (Cold Start). Please click 'Calculate Match' again in 30 seconds."
+        : (err.message || "Scoring failed");
+      setMessage({ type: "error", text: msg });
     } finally {
       setLoadingScore(false);
     }
@@ -725,6 +729,9 @@ export default function App({ token: initialToken = null, onLogout }) {
               )}
             </div>
           </div>
+          <div style={{ fontSize: 11, color: "#ffcc00", marginBottom: 15, opacity: 0.9 }}>
+            ⚠️ Note: First-time analysis may take ~60 seconds to boot up the AI models. Please be patient!
+          </div>
 
           {parsed ? (
             <div style={{ marginTop: 8 }}>
@@ -787,7 +794,7 @@ export default function App({ token: initialToken = null, onLogout }) {
           <textarea placeholder="Paste the JD here (role, responsibilities, required skills)..." value={jd} onChange={(e) => setJD(e.target.value)} style={{ width: "100%", minHeight: 140, resize: "vertical", borderRadius: 10, border: t.inputBorder, background: t.inputBg, color: t.inputText, padding: "10px 12px", fontSize: 13, outline: "none", lineHeight: 1.5 }} />
 
           <button onClick={matchScore} disabled={loadingScore} style={{ marginTop: 14, padding: "10px 18px", borderRadius: "999px", border: "none", cursor: !loadingScore ? "pointer" : "wait", fontSize: 14, fontWeight: 600, background: "linear-gradient(135deg,#00ffb3,#42a5f5,#f72585)", color: "#050816", boxShadow: "0 0 24px rgba(0,255,179,0.5)", width: "100%" }}>
-            {loadingScore ? "Analyzing match..." : "Calculate Match Score"}
+            {loadingScore ? "Analyzing... (This may take 1 min on first run)" : "Calculate Match Score"}
           </button>
 
           {hasScore && (
