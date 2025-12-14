@@ -33,8 +33,16 @@ load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
-# Small, fast embedding model
-model = SentenceTransformer("all-MiniLM-L6-v2")
+# Small, fast embedding model - loaded lazily to prevent startup delay
+_model = None
+
+def get_model():
+    global _model
+    if _model is None:
+        print("Loading SentenceTransformer model...")
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+        print("Model loaded!")
+    return _model
 
 app = FastAPI(title="Resume SaaS Backend")
 os.makedirs("avatars", exist_ok=True)
@@ -291,8 +299,9 @@ def compute_score(resume_text: str, jd_text: str, resume_skills_input: list[str]
 
     # 2. Semantic Similarity (Secondary Factor)
     try:
-        emb_resume = model.encode([resume_text])
-        emb_jd = model.encode([jd_text])
+        embed_model = get_model()
+        emb_resume = embed_model.encode([resume_text])
+        emb_jd = embed_model.encode([jd_text])
         similarity = float(cosine_similarity(emb_resume, emb_jd)[0][0])
         # Clamp between 0 and 1
         similarity = max(0.0, min(1.0, similarity))
