@@ -642,3 +642,10 @@ def get_analysis_detail(
         "bonus_skills": json.loads(analysis.bonus_skills),
         "created_at": analysis.created_at
     }
+
+
+# ---- RENDER DEPLOYMENT: Bind to PORT environment variable ----
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port)
