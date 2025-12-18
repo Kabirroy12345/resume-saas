@@ -69,35 +69,10 @@ async def startup_event():
     init_db()
     print("✅ Database initialized!")
 
-# Configure CORS
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "http://localhost:3000",
-]
-
-# Robustly add production frontend URL from env
-prod_frontend = os.getenv("FRONTEND_URL")
-if prod_frontend:
-    # Remove any trailing slash to unify
-    clean_url = prod_frontend.rstrip("/")
-    if clean_url not in origins:
-        origins.append(clean_url)
-    
-    # Also add the one with slash just in case
-    slash_url = clean_url + "/"
-    if slash_url not in origins:
-        origins.append(slash_url)
-
-# Add wildcard for subdomains if using Vercel (optional but helpful)
-# origins.append("https://*.vercel.app") 
-# Note: allow_origins=["*"] is the "nuclear" option if still stuck
-
+# Configure CORS - Nuclear option for production debugging to bypass all whitelist issues
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"], # Temporarily allow all for production unblocking
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -312,24 +287,13 @@ async def upload_avatar(
     with open(filepath, "wb") as f:
         f.write(await file.read())
 
-    # Save URL path (frontend will load it)
-    # user.avatar_url = f"http://127.0.0.1:8000/avatars/{filename}"
-    # Use relative path or construct dynamic URL based on request
-    # slightly hacky for static mounting but works if we return full URL
-    from fastapi import Request
-    
-    # We need to change the signature to accept Request if we want to build full URL,
-    # OR just store the relative path and let frontend handle it.
-    # But for now, let's just make it dynamic based on the *current* request host if possible,
-    # requires adding `request: Request` to the function args.
-    
-    # ...actually, let's just store the relative path `/avatars/...` 
-    # and ensure the frontend knows to prepend the API_URL.
-    # BUT, the frontend `Auth.jsx` might expect a full URL if it's displayng it directly.
-    # Let's check `User` model... usually it's a string.
-    # Safest quick deployment fix:
-    
-    base_url = str(request.base_url).rstrip("/")
+    # Use BACKEND_URL from env if set, otherwise fallback to request base
+    backend_url = os.getenv("BACKEND_URL")
+    if backend_url:
+        base_url = backend_url.rstrip("/")
+    else:
+        base_url = str(request.base_url).rstrip("/")
+        
     user.avatar_url = f"{base_url}/avatars/{filename}"
     
     db.commit()
