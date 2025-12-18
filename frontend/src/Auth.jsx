@@ -27,9 +27,14 @@ export default function AuthPage() {
       ? { email: formData.email, password: formData.password }
       : formData;
 
-    // FOOLPROOF FIX: Use URL constructor to handle all slash cases
-    const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-    const fullUrl = new URL(endpoint, baseUrl).href;
+    // FOOLPROOF FIX: Force 127.0.0.1 to avoid localhost IPv6 issues
+    const baseUrl = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.startsWith('http'))
+      ? import.meta.env.VITE_API_URL
+      : "/api";
+    const fullUrl = baseUrl.startsWith('http')
+      ? new URL(endpoint, baseUrl).href
+      : `${baseUrl}${endpoint}`.replace(/\/+/g, '/');
+
 
     console.log("v1.5 Auth Request:", fullUrl); // Version tagged log
 
@@ -71,7 +76,9 @@ export default function AuthPage() {
       } else {
         // Use baseUrl instead of API_BASE if API_BASE is not defined
         const urlToCheck = typeof baseUrl !== 'undefined' ? baseUrl : "backend";
-        setError(`Network error. Ensure backend is reachable at ${urlToCheck}`);
+        console.error("Network Error Details:", err);
+        const detailedError = err.message || "Unknown error";
+        setError(`Network error. Ensure backend is running at ${baseUrl}. (Detail: ${detailedError})`);
       }
     } finally {
       setLoading(false);

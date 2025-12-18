@@ -1,13 +1,18 @@
 import React, { useState, useEffect, useRef } from "react";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_BASE = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.startsWith('http'))
+  ? import.meta.env.VITE_API_URL
+  : "/api";
 
 async function apiFetch(path, opts = {}, token) {
   const headers = opts.headers ? { ...opts.headers } : {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const cfg = { ...opts, headers };
   // FOOLPROOF FIX: Use URL constructor
-  const fullUrl = new URL(path, API_BASE).href;
+  const fullUrl = API_BASE.startsWith('http')
+    ? new URL(path, API_BASE).href
+    : `${API_BASE}${path}`.replace(/\/+/g, '/'); // Ensure single slashes
+
   const res = await fetch(fullUrl, cfg);
   return res;
 }
@@ -358,11 +363,19 @@ export default function App({ token: initialToken = null, onLogout }) {
 
   async function downloadReport() {
     if (!lastPayload) return setMessage({ type: "error", text: "Calculate a score first." });
+    const enrichPayload = {
+      ...lastPayload,
+      improved_summary: improvedSummary,
+      skills_to_add: skillsToAdd,
+      bullet_suggestions: bulletSuggestions,
+      user_name: profileData.name || profileData.username || "Guest"
+    };
+
     try {
       const res = await apiFetchAuth("/init-score-download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(lastPayload),
+        body: JSON.stringify(enrichPayload),
       }, token);
 
       if (!res.ok) {
@@ -853,8 +866,8 @@ export default function App({ token: initialToken = null, onLogout }) {
                 {(improvedSummary || skillsToAdd.length > 0 || bulletSuggestions.length > 0) && (
                   <div style={{ marginTop: 12 }}>
                     {improvedSummary && (<div style={{ marginBottom: 10 }}><div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>📌 Improved Summary</div><div style={{ fontSize: 12, lineHeight: 1.5, opacity: 0.95 }}>{improvedSummary}</div></div>)}
-                    {skillsToAdd.length > 0 && (<div style={{ marginBottom: 10 }}><div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>✨ Skills to Add</div><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{skillsToAdd.map((s, i) => (<span key={i} style={pill("rgba(190,242,100,0.15)", "#ecfccb")}>{s}</span>))}</div></div>)}
-                    {bulletSuggestions.length > 0 && (<div><div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>💡 Bullet Suggestions</div><ul style={{ fontSize: 12, paddingLeft: 18, margin: 0, opacity: 0.95, lineHeight: 1.6 }}>{bulletSuggestions.map((b, i) => (<li key={i} style={{ marginBottom: 6 }}>{b}</li>))}</ul></div>)}
+                    {skillsToAdd.length > 0 && (<div style={{ marginBottom: 10 }}><div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>✨ Skills to Add</div><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{skillsToAdd.map((s, i) => (<span key={i} style={pill("rgba(190,242,100,0.15)", "#ecfccb")}>{typeof s === 'object' ? (s.skill || s.name || JSON.stringify(s)) : s}</span>))}</div></div>)}
+                    {bulletSuggestions.length > 0 && (<div><div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>💡 Bullet Suggestions</div><ul style={{ fontSize: 12, paddingLeft: 18, margin: 0, opacity: 0.95, lineHeight: 1.6 }}>{bulletSuggestions.map((b, i) => (<li key={i} style={{ marginBottom: 6 }}>{typeof b === 'object' ? (<span><b style={{ color: '#00f5d4' }}>{b.bullet || b.text || JSON.stringify(b)}</b> {b.why && <span style={{ display: 'block', fontSize: 11, opacity: 0.7, marginTop: 2 }}>{b.why}</span>}</span>) : b}</li>))}</ul></div>)}
                   </div>
                 )}
               </div>

@@ -17,7 +17,13 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Create all tables
 def init_db():
-    Base.metadata.create_all(bind=engine)
+    print("   -> Calling Base.metadata.create_all...")
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("   -> Base.metadata.create_all done.")
+    except Exception as e:
+        print(f"   -> ERROR in init_db: {e}")
+        raise e
 
 # Get database session
 def get_db():

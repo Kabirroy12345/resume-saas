@@ -15,7 +15,7 @@ load_dotenv()
 # Argon2 for hashing
 ph = PasswordHasher()
 
-SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY", "fallback_dev_secret_key_dont_use_in_prod_123")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
 
