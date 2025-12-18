@@ -78,13 +78,22 @@ origins = [
     "http://localhost:3000",
 ]
 
-# Add production frontend URL from env if exists
+# Robustly add production frontend URL from env
 prod_frontend = os.getenv("FRONTEND_URL")
 if prod_frontend:
-    origins.append(prod_frontend)
-    # Also handle the common .vercel.app suffix if needed, or just encourage user to set it
-    if not prod_frontend.endswith("/"):
-        origins.append(prod_frontend + "/")
+    # Remove any trailing slash to unify
+    clean_url = prod_frontend.rstrip("/")
+    if clean_url not in origins:
+        origins.append(clean_url)
+    
+    # Also add the one with slash just in case
+    slash_url = clean_url + "/"
+    if slash_url not in origins:
+        origins.append(slash_url)
+
+# Add wildcard for subdomains if using Vercel (optional but helpful)
+# origins.append("https://*.vercel.app") 
+# Note: allow_origins=["*"] is the "nuclear" option if still stuck
 
 app.add_middleware(
     CORSMiddleware,
