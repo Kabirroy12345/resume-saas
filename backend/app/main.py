@@ -45,18 +45,21 @@ def get_groq_client():
             return None
     return _groq_client
 
-# Small, fast embedding model - loaded lazily to prevent startup delay
-_model = None
+# Small, fast TF-IDF similarity instead of heavy SentenceTransformer
+_vectorizer = None
 
-def get_model():
-    global _model
-    if _model is None:
-        print("Loading SentenceTransformer model...")
-        # Lazy import heavy libraries
-        from sentence_transformers import SentenceTransformer
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
-        print("Model loaded!")
-    return _model
+def get_similarity(text1, text2):
+    """Memory-efficient TF-IDF based similarity"""
+    try:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.metrics.pairwise import cosine_similarity
+        
+        vectorizer = TfidfVectorizer(stop_words='english')
+        tfidf = vectorizer.fit_transform([text1, text2])
+        return float(cosine_similarity(tfidf[0:1], tfidf[1:2])[0][0])
+    except Exception as e:
+        print(f"Similarity error: {e}")
+        return 0.0
 
 app = FastAPI(title="Resume SaaS Backend")
 os.makedirs("avatars", exist_ok=True)
@@ -69,11 +72,12 @@ async def startup_event():
     init_db()
     print("✅ Database initialized!")
 
-# Configure CORS - Nuclear option for production debugging to bypass all whitelist issues
+# Configure CORS - Nuclear option for production
+# Set allow_credentials=False when using "*" to avoid browser blocks
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Temporarily allow all for production unblocking
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False, 
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -292,7 +296,11 @@ async def upload_avatar(
     if backend_url:
         base_url = backend_url.rstrip("/")
     else:
-        base_url = str(request.base_url).rstrip("/")
+        # Better fallback for production proxies
+        # If running on Render, it usually has specific headers
+        host = request.headers.get("host", "localhost:8000")
+        scheme = request.headers.get("x-forwarded-proto", "http")
+        base_url = f"{scheme}://{host}"
         
     user.avatar_url = f"{base_url}/avatars/{filename}"
     
@@ -349,11 +357,7 @@ def compute_score(resume_text: str, jd_text: str, resume_skills_input: list[str]
 
     # 2. Semantic Similarity (Secondary Factor)
     try:
-        from sklearn.metrics.pairwise import cosine_similarity
-        embed_model = get_model()
-        emb_resume = embed_model.encode([resume_text])
-        emb_jd = embed_model.encode([jd_text])
-        similarity = float(cosine_similarity(emb_resume, emb_jd)[0][0])
+        similarity = get_similarity(resume_text, jd_text)
         # Clamp between 0 and 1
         similarity = max(0.0, min(1.0, similarity))
     except Exception:

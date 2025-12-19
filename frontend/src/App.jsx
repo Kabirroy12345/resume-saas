@@ -165,6 +165,14 @@ export default function App({ token: initialToken = null, onLogout }) {
         return;
       }
       const data = await res.json();
+
+      // FIX: If avatar_url points to localhost/127.0.0.1 and we are in production, try to fix it
+      if (data.avatar_url && data.avatar_url.includes('127.0.0.1') && API_BASE.startsWith('http')) {
+        const apiBaseUrl = new URL(API_BASE);
+        const avatarPath = new URL(data.avatar_url).pathname;
+        data.avatar_url = `${apiBaseUrl.origin}${avatarPath}`;
+      }
+
       setProfileData((p) => ({ ...p, ...data }));
     } catch (err) {
       console.error("fetchProfile error", err);
@@ -353,7 +361,7 @@ export default function App({ token: initialToken = null, onLogout }) {
       console.error(err);
       const isTimeout = err.message && (err.message.includes("Failed to fetch") || err.name === "TypeError");
       const msg = isTimeout
-        ? "Request timed out. The AI model is still booting (Cold Start). Please click 'Calculate Match' again in 30 seconds."
+        ? "Network error or CORS issue. Please ensure the backend is running and allow-origins is set correctly. (Current API: " + API_BASE + ")"
         : (err.message || "Scoring failed");
       setMessage({ type: "error", text: msg });
     } finally {
